@@ -1,12 +1,15 @@
 module uimodel.types;
 
-abstract class UIObject
+class UIObject
 {
+    uint namespaceIndex;
     string id;
 }
 
-class TreeNode : UIObject
+class TreeNode
 {
     TreeNode parent;
     TreeNode[] children;
+
+    UIObject obj;
 }
