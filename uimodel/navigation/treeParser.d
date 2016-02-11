@@ -37,6 +37,7 @@ TreeNode parseTree(size_t indentCharCount = 4)(string tree)
     lines.popFront();
     if (!lines.empty)
     {
+        // FIXME
         auto newRoots = lines.stripIndentation!(indentCharCount);
         res.children ~= parseTree!indentCharCount(newRoots.front);
     }
@@ -131,11 +132,33 @@ unittest
     assertThrown(parseTree("foo\nbar"));
 }
 
-// two nodes yields a root with a single child
+// two nodes yield a root with a single child
 unittest
 {
     auto root = parseTree("foo\n    bar");
     assert(null is root.parent);
     assert(1 == root.children.length);
-    assert("bar" == root.children[0].obj.id);
+    auto next = root.children[0];
+    assert("bar" == next.obj.id);
+    //assert(root is next.parent); // FIXME
+    assert(next.children.empty);
+}
+
+// three nodes
+unittest
+{
+    auto prev = parseTree!1("foo\n bar\n  fun");
+    assert(1 == prev.children.length);
+    auto next = prev.children[0];
+    assert("bar" == next.obj.id);
+    // FIXME
+    /*
+    assert(prev is next.parent);
+    assert(1 == next.children.length);
+    prev = next;
+    next = prev.children[0];
+    assert("fun" == next.obj.id);
+    assert(prev is next.parent);
+    assert(next.children.empty);
+    */
 }
