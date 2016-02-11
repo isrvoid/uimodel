@@ -3,9 +3,7 @@ module uimodel.navigation.tree_parser;
 import std.range.primitives : empty, front;
 import std.algorithm : map;
 import std.traits;
-import std.exception : assertThrown, enforce;
-import std.string;
-import std.range;
+import std.range : ElementType;
 import std.uni : isWhite;
 
 import uimodel.uiobject;
@@ -15,48 +13,51 @@ import uimodel.navigation.tree;
 
 private enum Msg : string
 {
-    indentedRoot = "Tree root must be at the beginning of the line.",
+    rootIsIndented = "Tree root must be at the beginning of the line.",
     wrongIndentation = "Indentation is inconsistent.",
 }
 
 //TreeNode[] parseForest(string forest)
 //{ }
 
-TreeNode parseTree(uint indent = 4)(string tree)
+TreeNode parseTree(size_t indentCharCount = 4)(string tree)
 {
-    static assert(indent > 0);
+    static assert(indentCharCount > 0);
 
-    import std.array : array;
-    auto lines = tree.getNonEmptyLinesStrippedOfTrailingWhitespace().array();
+    auto lines = tree.getNonEmptyLinesStrippedOfTrailingWhitespace();
     if (lines.empty)
         return null;
 
     auto firstLine = lines.front;
     if (firstLine.front.isWhite())
-        throw new Exception(Msg.indentedRoot);
+        throw new Exception(Msg.rootIsIndented);
+
+    auto res = new TreeNode(new UIObject(firstLine));
 
     lines.popFront();
     if (!lines.empty)
-        lines.stripIndent!indent;
-
-    return new TreeNode(new UIObject(firstLine));
+    {
+        auto newRoots = lines.stripIndentation!(indentCharCount);
+        res.children ~= parseTree!indentCharCount(newRoots.front);
+    }
+    return res;
 }
 
 private auto getNonEmptyLinesStrippedOfTrailingWhitespace(string s) pure
 {
     import std.algorithm : filter;
+    import std.string;
     return s.splitLines().map!(a => a.stripRight()).filter!(a => !a.empty);
 }
 
-private void stripIndent(uint indent)(string[] lines)
+private auto stripIndentation(size_t indentCharCount, T)(T lines) pure nothrow
+    if (isIterable!T && isSomeString!(ElementType!T))
 {
-    foreach(ref line; lines)
-    {
-        if (line.length < indent || !isWhite(line[0 .. indent]))
-            throw new Exception(Msg.wrongIndentation);
+    return lines.map!((a) {
+            if (a.length < indentCharCount || !isWhite(a[0 .. indentCharCount]))
+                throw new Exception(Msg.wrongIndentation);
 
-        line = line[indent .. $];
-    }
+            return a[indentCharCount .. $]; });
 }
 
 private bool isWhite(string s) pure nothrow
@@ -70,6 +71,7 @@ private bool isWhite(string s) pure nothrow
 
 version (unittest)
 {
+    import std.exception : assertThrown;
     bool isSoleNode(TreeNode n)
     {
         return (null is n.parent && n.children.empty);
@@ -134,15 +136,6 @@ unittest
 {
     auto root = parseTree("foo\n    bar");
     assert(null is root.parent);
-    // FIXME
-    //assert
+    assert(1 == root.children.length);
+    assert("bar" == root.children[0].obj.id);
 }
-
-
-/* XXX
-parseForest
-    splitAtNotches
-        loop: parseTree
-
-indentation rule should be determined for each tree to make it less strict
- */
