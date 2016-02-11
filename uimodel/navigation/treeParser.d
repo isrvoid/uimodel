@@ -1,31 +1,71 @@
 module uimodel.navigation.tree_parser;
 
-import std.range.primitives : empty;
+import std.range.primitives : empty, front;
 import std.algorithm : map;
+import std.traits;
+import std.exception : assertThrown, enforce;
+import std.string;
+import std.range;
+import std.uni : isWhite;
 
 import uimodel.uiobject;
 import uimodel.navigation.tree;
 
 @safe:
-// XXX remember ID namespace (prefix) to reduce clutter
 
-//TreeNode[string] parseForest(string forest)
+private enum Msg : string
+{
+    indentedRoot = "Tree root must be at the beginning of the line.",
+    wrongIndentation = "Indentation is inconsistent.",
+}
+
+//TreeNode[] parseForest(string forest)
 //{ }
 
-TreeNode parseTree(string tree)
+TreeNode parseTree(uint indent = 4)(string tree)
 {
-    auto lines = tree.getNonEmptyLinesStrippedOfTrailingWhitespace();
+    static assert(indent > 0);
+
+    import std.array : array;
+    auto lines = tree.getNonEmptyLinesStrippedOfTrailingWhitespace().array();
     if (lines.empty)
         return null;
 
-    return new TreeNode(new UIObject(lines.front));
+    auto firstLine = lines.front;
+    if (firstLine.front.isWhite())
+        throw new Exception(Msg.indentedRoot);
+
+    lines.popFront();
+    if (!lines.empty)
+        lines.stripIndent!indent;
+
+    return new TreeNode(new UIObject(firstLine));
 }
 
 private auto getNonEmptyLinesStrippedOfTrailingWhitespace(string s) pure
 {
-    import std.string;
     import std.algorithm : filter;
     return s.splitLines().map!(a => a.stripRight()).filter!(a => !a.empty);
+}
+
+private void stripIndent(uint indent)(string[] lines)
+{
+    foreach(ref line; lines)
+    {
+        if (line.length < indent || !isWhite(line[0 .. indent]))
+            throw new Exception(Msg.wrongIndentation);
+
+        line = line[indent .. $];
+    }
+}
+
+private bool isWhite(string s) pure nothrow
+{
+    foreach(c; s)
+        if (!c.isWhite())
+            return false;
+
+    return true;
 }
 
 version (unittest)
@@ -76,14 +116,33 @@ unittest
     assert("foo bar" == root.obj.id);
 }
 
+// tree root can't be indented
+unittest
+{
+    assertThrown(parseTree(" foo"));
+    assertThrown(parseTree("\tfoo"));
+}
+
+// tree can't have multiple roots
+unittest
+{
+    assertThrown(parseTree("foo\nbar"));
+}
+
+// two nodes yields a root with a single child
+unittest
+{
+    auto root = parseTree("foo\n    bar");
+    assert(null is root.parent);
+    // FIXME
+    //assert
+}
 
 
 /* XXX
 parseForest
     splitAtNotches
-        loop:
-        popTreeName
-        parseTree
+        loop: parseTree
 
-indentation rule is determined for each tree to make it less strict
+indentation rule should be determined for each tree to make it less strict
  */
