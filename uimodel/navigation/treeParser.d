@@ -16,13 +16,10 @@ TreeNode parseTree(string tree)
 unittest
 {
     auto root = parseTree(null);
-    assert(null == root);
+    assert(null is root);
 
     root = parseTree("");
-    assert(null == root);
-
-    root = parseTree(" \t\t\n  \r\n  \n");
-    assert(null == root);
+    assert(null is root);
 }
 
 /* XXX

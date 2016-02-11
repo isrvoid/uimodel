@@ -2,7 +2,7 @@ module uimodel.types;
 
 class UIObject
 {
-    uint namespaceIndex;
+    uint namespace;
     string id;
 }
 
