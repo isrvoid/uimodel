@@ -1,11 +1,10 @@
 module uimodel.navigation.tree_parser;
 
-import std.range.primitives : empty;
-import std.algorithm : map;
+import std.algorithm;
 import std.traits;
-import std.range : ElementType;
+import std.range;
 import std.uni : isWhite;
-import std.array : array;
+import std.array : array, Appender;
 
 import uimodel.uiobject;
 import uimodel.navigation.tree;
@@ -18,19 +17,34 @@ private enum Msg : string
     wrongIndentation = "Indentation is inconsistent.",
 }
 
-//TreeNode[] parseForest(string forest)
-//{ }
-
-TreeNode parseTree(size_t indentCharCount = 4)(string tree)
+TreeNode[] parseTrees(size_t indentCharCount = 4)(string text)
 {
     static assert(indentCharCount > 0);
 
-    auto lines = tree.getNonEmptyLinesStrippedOfTrailingWhitespace().array();
-    return parseTreeLines!indentCharCount(lines);
+    auto lines = text.getNonEmptyLinesStrippedOfTrailingWhitespace().array();
+    Appender!(TreeNode[]) trees;
+    foreach (treeLines; splitRoots(lines))
+    {
+        auto tree = parseTreeLines!indentCharCount(null, treeLines);
+        trees.put(tree);
+    }
+    return trees.data;
 }
 
-// TODO change to ranges
-private TreeNode parseTreeLines(size_t indentCharCount)(string[] lines)
+private:
+// FIXME remove
+version (unittest)
+{
+    TreeNode parseTree(size_t indentCharCount = 4)(string tree)
+    {
+        static assert(indentCharCount > 0);
+
+        auto lines = tree.getNonEmptyLinesStrippedOfTrailingWhitespace().array();
+        return parseTreeLines!indentCharCount(null, lines);
+    }
+}
+
+TreeNode parseTreeLines(size_t indentCharCount)(TreeNode root, string[] lines)
 {
     if (lines.empty)
         return null;
@@ -39,43 +53,67 @@ private TreeNode parseTreeLines(size_t indentCharCount)(string[] lines)
     if (firstLineBeginsWithWhitespace)
         throw new Exception(Msg.rootIsIndented);
 
-    auto res = new TreeNode(new UIObject(lines[0]));
-    lines = lines[1 .. $];
+    auto node = new TreeNode(root, new UIObject(lines[0]));
 
-    if (!lines.empty)
-    {
-        string[] lowerHierarchyLevel = lines.stripIndentation!(indentCharCount).array();
-        res.children ~= parseTreeLines!indentCharCount(lowerHierarchyLevel);
-        foreach (child; res.children)
-            child.parent = res;
-    }
-    return res;
+    Appender!(TreeNode[]) children;
+    auto lowerHierarchyLevel = lines[1 .. $].stripIndentation!indentCharCount.array();
+    foreach(lowerRoot; splitRoots(lowerHierarchyLevel))
+        children.put(parseTreeLines!indentCharCount(node, lowerRoot));
+
+    node.children = children.data;
+    return node;
 }
 
-private auto getNonEmptyLinesStrippedOfTrailingWhitespace(string s) pure
+auto getNonEmptyLinesStrippedOfTrailingWhitespace(string s) pure
 {
-    import std.algorithm : filter;
     import std.string;
     return s.splitLines().map!(a => a.stripRight()).filter!(a => !a.empty);
 }
 
-private auto stripIndentation(size_t indentCharCount, T)(T lines) pure nothrow
+auto stripIndentation(size_t indentCharCount, T)(T lines) pure nothrow
     if (isIterable!T && isSomeString!(ElementType!T))
 {
-    return lines.map!((a) {
+    return lines.map!((a)
+        {
             if (a.length < indentCharCount || !isWhite(a[0 .. indentCharCount]))
                 throw new Exception(Msg.wrongIndentation);
 
-            return a[indentCharCount .. $]; });
+            return a[indentCharCount .. $];
+        });
 }
 
-private bool isWhite(string s) pure nothrow
+bool isWhite(string s) pure nothrow
 {
     foreach(c; s)
         if (!c.isWhite())
             return false;
 
     return true;
+}
+
+string[][] splitRoots(string[] lines)
+{
+    Appender!(string[][]) app;
+    auto rootIndices = getRootIndices(lines);
+    foreach (i; rootIndices.retro())
+    {
+        app.put(lines[i .. $]);
+        lines = lines[0 .. i];
+    }
+    app.data.reverse();
+    return app.data;
+}
+
+size_t[] getRootIndices(string[] lines)
+{
+    Appender!(size_t[]) app;
+    foreach (i, line; lines)
+    {
+        bool isRoot = !isWhite(line[0]);
+        if (isRoot)
+            app.put(i);
+    }
+    return app.data;
 }
 
 version (unittest)
@@ -88,7 +126,7 @@ version (unittest)
 
     unittest
     {
-        assert(new TreeNode(null).isSoleNode());
+        assert(new TreeNode(null, null).isSoleNode());
     }
 }
 
@@ -166,4 +204,75 @@ unittest
     assert("fun" == next.obj.id);
     assert(prev is next.parent);
     assert(next.children.empty);
+}
+
+// two children tree
+unittest
+{
+    auto root = parseTree!1("foo\n bar\n fun");
+    assert(2 == root.children.length);
+}
+
+version (unittest)
+{
+    void assertIdAndParent(TreeNode node, string id, TreeNode parent)
+    {
+        assert(id == node.obj.id);
+        assert(parent is node.parent);
+    }
+}
+
+unittest
+{
+    import std.conv : text;
+    enum input = "
+0
+ 00
+  000
+ 01
+  010
+   0100
+    01000
+ 02
+
+1
+ 10
+  100
+  101
+ 11
+
+2
+ 20
+  200
+  201
+
+3";
+    enum childrenCount = [3, 2, 1, 0];
+    auto trees = parseTrees!1(input);
+    assert(4 == trees.length);
+    foreach (i, tree; trees)
+    {
+        tree.assertIdAndParent(i.text(), null);
+        assert(childrenCount[i] == tree.children.length);
+    }
+
+    TreeNode temp;
+    // tree 0
+    temp = trees[0].children[0];
+    temp.assertIdAndParent("00", trees[0]);
+    assert(1 == temp.children.length);
+    temp.children[0].assertIdAndParent("000", temp);
+    assert(temp.children[0].children.empty);
+
+    assert("01000" == trees[0].children[1].children[0].children[0].children[0].obj.id);
+
+    // tree 2
+    temp = trees[2].children[0];
+    assert(2 == temp.children.length);
+    temp.assertIdAndParent("20", trees[2]);
+
+    temp.children[0].assertIdAndParent("200", temp);
+    assert(temp.children[0].children.empty);
+    temp.children[1].assertIdAndParent("201", temp);
+    assert(temp.children[1].children.empty);
 }

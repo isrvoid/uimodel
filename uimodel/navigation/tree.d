@@ -11,12 +11,9 @@ class TreeNode
 
     UIObject obj;
 
-    this() { }
-
-    this(UIObject _obj, TreeNode _parent = null, TreeNode[] _children = null)
+    this(TreeNode _parent, UIObject _obj)
     {
-        obj = _obj;
         parent = _parent;
-        children = _children;
+        obj = _obj;
     }
 }
