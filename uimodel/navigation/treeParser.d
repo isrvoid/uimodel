@@ -17,34 +17,23 @@ private enum Msg : string
     wrongIndentation = "Indentation is inconsistent.",
 }
 
-TreeNode[] parseTrees(size_t indentCharCount = 4)(string text)
+TreeNode[] parseTrees(size_t indentationSize = 4)(string text)
 {
-    static assert(indentCharCount > 0);
+    static assert(indentationSize > 0);
 
     auto lines = text.getNonEmptyLinesStrippedOfTrailingWhitespace().array();
     Appender!(TreeNode[]) trees;
     foreach (treeLines; splitRoots(lines))
     {
-        auto tree = parseTreeLines!indentCharCount(null, treeLines);
+        auto tree = parseTreeLines!indentationSize(null, treeLines);
         trees.put(tree);
     }
     return trees.data;
 }
 
 private:
-// FIXME remove
-version (unittest)
-{
-    TreeNode parseTree(size_t indentCharCount = 4)(string tree)
-    {
-        static assert(indentCharCount > 0);
 
-        auto lines = tree.getNonEmptyLinesStrippedOfTrailingWhitespace().array();
-        return parseTreeLines!indentCharCount(null, lines);
-    }
-}
-
-TreeNode parseTreeLines(size_t indentCharCount)(TreeNode root, string[] lines)
+TreeNode parseTreeLines(size_t indentationSize)(TreeNode root, string[] lines)
 {
     if (lines.empty)
         return null;
@@ -56,12 +45,18 @@ TreeNode parseTreeLines(size_t indentCharCount)(TreeNode root, string[] lines)
     auto node = new TreeNode(root, new UIObject(lines[0]));
 
     Appender!(TreeNode[]) children;
-    auto lowerHierarchyLevel = lines[1 .. $].stripIndentation!indentCharCount.array();
+    auto lowerHierarchyLevel = lines[1 .. $].stripIndentation!indentationSize.array();
     foreach(lowerRoot; splitRoots(lowerHierarchyLevel))
-        children.put(parseTreeLines!indentCharCount(node, lowerRoot));
+        children.put(parseTreeLines!indentationSize(node, lowerRoot));
 
     node.children = children.data;
     return node;
+}
+
+// tree can't have multiple roots
+unittest
+{
+    assertThrown(parseTreeLines!4(null, ["foo", "bar"]));
 }
 
 auto getNonEmptyLinesStrippedOfTrailingWhitespace(string s) pure
@@ -70,15 +65,15 @@ auto getNonEmptyLinesStrippedOfTrailingWhitespace(string s) pure
     return s.splitLines().map!(a => a.stripRight()).filter!(a => !a.empty);
 }
 
-auto stripIndentation(size_t indentCharCount, T)(T lines) pure nothrow
+auto stripIndentation(size_t indentationSize, T)(T lines) pure nothrow
     if (isIterable!T && isSomeString!(ElementType!T))
 {
     return lines.map!((a)
         {
-            if (a.length < indentCharCount || !isWhite(a[0 .. indentCharCount]))
+            if (a.length < indentationSize || !isWhite(a[0 .. indentationSize]))
                 throw new Exception(Msg.wrongIndentation);
 
-            return a[indentCharCount .. $];
+            return a[indentationSize .. $];
         });
 }
 
@@ -95,6 +90,9 @@ string[][] splitRoots(string[] lines)
 {
     Appender!(string[][]) app;
     auto rootIndices = getRootIndices(lines);
+    if (!lines.empty && rootIndices.empty)
+        throw new Exception(Msg.wrongIndentation);
+
     foreach (i; rootIndices.retro())
     {
         app.put(lines[i .. $]);
@@ -124,9 +122,14 @@ version (unittest)
         return (null is n.parent && n.children.empty);
     }
 
-    unittest
+    TreeNode parseTree(size_t indentationSize = 4)(string text)
     {
-        assert(new TreeNode(null, null).isSoleNode());
+        auto trees = parseTrees!indentationSize(text);
+        if (null is trees)
+            return null;
+
+        assert(trees.length == 1);
+        return trees[0];
     }
 }
 
@@ -170,12 +173,6 @@ unittest
 {
     assertThrown(parseTree(" foo"));
     assertThrown(parseTree("\tfoo"));
-}
-
-// tree can't have multiple roots
-unittest
-{
-    assertThrown(parseTree("foo\nbar"));
 }
 
 // two nodes yield a root with a single child
