@@ -1,10 +1,11 @@
 module uimodel.navigation.tree_parser;
 
-import std.range.primitives : empty, front;
+import std.range.primitives : empty;
 import std.algorithm : map;
 import std.traits;
 import std.range : ElementType;
 import std.uni : isWhite;
+import std.array : array;
 
 import uimodel.uiobject;
 import uimodel.navigation.tree;
@@ -24,22 +25,29 @@ TreeNode parseTree(size_t indentCharCount = 4)(string tree)
 {
     static assert(indentCharCount > 0);
 
-    auto lines = tree.getNonEmptyLinesStrippedOfTrailingWhitespace();
+    auto lines = tree.getNonEmptyLinesStrippedOfTrailingWhitespace().array();
+    return parseTreeLines!indentCharCount(lines);
+}
+
+// TODO change to ranges
+private TreeNode parseTreeLines(size_t indentCharCount)(string[] lines)
+{
     if (lines.empty)
         return null;
 
-    auto firstLine = lines.front;
-    if (firstLine.front.isWhite())
+    bool firstLineBeginsWithWhitespace = isWhite(lines[0][0]);
+    if (firstLineBeginsWithWhitespace)
         throw new Exception(Msg.rootIsIndented);
 
-    auto res = new TreeNode(new UIObject(firstLine));
+    auto res = new TreeNode(new UIObject(lines[0]));
+    lines = lines[1 .. $];
 
-    lines.popFront();
     if (!lines.empty)
     {
-        // FIXME
-        auto newRoots = lines.stripIndentation!(indentCharCount);
-        res.children ~= parseTree!indentCharCount(newRoots.front);
+        string[] lowerHierarchyLevel = lines.stripIndentation!(indentCharCount).array();
+        res.children ~= parseTreeLines!indentCharCount(lowerHierarchyLevel);
+        foreach (child; res.children)
+            child.parent = res;
     }
     return res;
 }
@@ -140,7 +148,7 @@ unittest
     assert(1 == root.children.length);
     auto next = root.children[0];
     assert("bar" == next.obj.id);
-    //assert(root is next.parent); // FIXME
+    assert(root is next.parent);
     assert(next.children.empty);
 }
 
@@ -151,8 +159,6 @@ unittest
     assert(1 == prev.children.length);
     auto next = prev.children[0];
     assert("bar" == next.obj.id);
-    // FIXME
-    /*
     assert(prev is next.parent);
     assert(1 == next.children.length);
     prev = next;
@@ -160,5 +166,4 @@ unittest
     assert("fun" == next.obj.id);
     assert(prev is next.parent);
     assert(next.children.empty);
-    */
 }
