@@ -4,14 +4,15 @@ import uimodel.uiobject;
 
 @safe:
 
-class TreeNode
+class TreeNode (T)
 {
     TreeNode parent;
     TreeNode[] children;
 
-    UIObject obj;
+    T obj;
+    alias obj this;
 
-    this(TreeNode _parent, UIObject _obj)
+    this(TreeNode _parent, T _obj)
     {
         parent = _parent;
         obj = _obj;

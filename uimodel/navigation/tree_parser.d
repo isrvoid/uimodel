@@ -7,17 +7,14 @@ import std.array : array, Appender;
 
 import uimodel.uiobject;
 import uimodel.navigation.tree;
+alias UITreeNode = TreeNode!UIObject;
 
 @safe:
-/*
-   TODO
-   - inherit UITreeNode from TreeNode
-   */
 
-TreeNode[] parseTrees(string text)
+UITreeNode[] parseTrees(string text)
 {
     auto lines = text.normalizeAndVerifyInput();
-    Appender!(TreeNode[]) trees;
+    Appender!(UITreeNode[]) trees;
     foreach (treeLines; splitRoots(lines))
     {
         auto tree = parseTree(null, treeLines);
@@ -43,18 +40,18 @@ alias Msg = TreeParserException.Msg;
 
 private:
 
-TreeNode parseTree(TreeNode root, string[] lines)
+UITreeNode parseTree(UITreeNode root, string[] lines)
 {
     if (lines.empty)
         return null;
 
     assert(!lines[0][0].isWhite());
-    auto node = new TreeNode(root, new UIObject(lines[0]));
+    auto node = new UITreeNode(root, new UIObject(lines[0]));
     lines = lines[1 .. $];
     // lower hierarchy level by popping front chars
     lines.each!((ref a) => a = a[1 .. $]);
 
-    Appender!(TreeNode[]) children;
+    Appender!(UITreeNode[]) children;
     foreach(lowerRoot; splitRoots(lines))
         children.put(parseTree(node, lowerRoot));
 
@@ -207,12 +204,12 @@ size_t[] getRootIndices(string[] lines)
 version (unittest)
 {
     import std.exception : assertThrown;
-    bool isSoleNode(TreeNode n)
+    bool isSoleNode(UITreeNode n)
     {
         return (null is n.parent && n.children.empty);
     }
 
-    TreeNode parseTree(string text)
+    UITreeNode parseTree(string text)
     {
         auto trees = parseTrees(text);
         if (null is trees)
@@ -238,8 +235,8 @@ unittest
 {
     auto root = parseTree("foo");
     assert(root.isSoleNode());
-    assert(0 == root.obj.namespace);
-    assert("foo" == root.obj.id);
+    assert(0 == root.namespace);
+    assert("foo" == root.id);
 }
 
 // trailing whitespaces are ignored
@@ -247,7 +244,7 @@ unittest
 {
     auto root = parseTree("foo bar  \t \t\r\n");
     assert(root.isSoleNode());
-    assert("foo bar" == root.obj.id);
+    assert("foo bar" == root.id);
 }
 
 // lines containing whitespaces are ignored
@@ -255,7 +252,7 @@ unittest
 {
     auto root = parseTree(" \n  \n\t  \nfoo bar \n\t\r\n   \t ");
     assert(root.isSoleNode());
-    assert("foo bar" == root.obj.id);
+    assert("foo bar" == root.id);
 }
 
 // tree root can't be indented
@@ -272,7 +269,7 @@ unittest
     assert(null is root.parent);
     assert(1 == root.children.length);
     auto next = root.children[0];
-    assert("bar" == next.obj.id);
+    assert("bar" == next.id);
     assert(root is next.parent);
     assert(next.children.empty);
 }
@@ -283,12 +280,12 @@ unittest
     auto prev = parseTree("foo\n bar\n  fun");
     assert(1 == prev.children.length);
     auto next = prev.children[0];
-    assert("bar" == next.obj.id);
+    assert("bar" == next.id);
     assert(prev is next.parent);
     assert(1 == next.children.length);
     prev = next;
     next = prev.children[0];
-    assert("fun" == next.obj.id);
+    assert("fun" == next.id);
     assert(prev is next.parent);
     assert(next.children.empty);
 }
@@ -310,9 +307,9 @@ unittest
 
 version (unittest)
 {
-    void assertIdAndParent(TreeNode node, string id, TreeNode parent)
+    void assertIdAndParent(UITreeNode node, string id, UITreeNode parent)
     {
-        assert(id == node.obj.id);
+        assert(id == node.id);
         assert(parent is node.parent);
     }
 }
@@ -351,7 +348,7 @@ unittest
         assert(childrenCount[i] == tree.children.length);
     }
 
-    TreeNode temp;
+    UITreeNode temp;
     // tree 0
     temp = trees[0].children[0];
     temp.assertIdAndParent("00", trees[0]);
@@ -359,7 +356,7 @@ unittest
     temp.children[0].assertIdAndParent("000", temp);
     assert(temp.children[0].children.empty);
 
-    assert("01000" == trees[0].children[1].children[0].children[0].children[0].obj.id);
+    assert("01000" == trees[0].children[1].children[0].children[0].children[0].id);
 
     // tree 2
     temp = trees[2].children[0];
