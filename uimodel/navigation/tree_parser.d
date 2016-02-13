@@ -1,8 +1,7 @@
 module uimodel.navigation.tree_parser;
 
 import std.algorithm;
-import std.traits;
-import std.range;
+import std.range : empty, retro;
 import std.uni : isWhite;
 import std.array : array, Appender;
 
@@ -12,9 +11,7 @@ import uimodel.navigation.tree;
 @safe:
 /*
    TODO
-   - implement verify
    - inherit UITreeNode from TreeNode
-   - remove whitespace check from splitRoots -- input will have been verified
    */
 
 TreeNode[] parseTrees(string text)
@@ -23,7 +20,7 @@ TreeNode[] parseTrees(string text)
     Appender!(TreeNode[]) trees;
     foreach (treeLines; splitRoots(lines))
     {
-        auto tree = parseTreeLines(null, treeLines);
+        auto tree = parseTree(null, treeLines);
         trees.put(tree);
     }
     return trees.data;
@@ -46,19 +43,20 @@ alias Msg = TreeParserException.Msg;
 
 private:
 
-TreeNode parseTreeLines(TreeNode root, string[] lines)
+TreeNode parseTree(TreeNode root, string[] lines)
 {
     if (lines.empty)
         return null;
 
-    auto node = new TreeNode(root, new UIObject(lines.front));
-    lines.popFront();
+    assert(!lines[0][0].isWhite());
+    auto node = new TreeNode(root, new UIObject(lines[0]));
+    lines = lines[1 .. $];
     // lower hierarchy level by popping front chars
     lines.each!((ref a) => a = a[1 .. $]);
 
     Appender!(TreeNode[]) children;
     foreach(lowerRoot; splitRoots(lines))
-        children.put(parseTreeLines(node, lowerRoot));
+        children.put(parseTree(node, lowerRoot));
 
     node.children = children.data;
     return node;
@@ -68,7 +66,7 @@ string[] normalizeAndVerifyInput(string s) pure
 {
     auto lines = s.getNonEmptyLinesStrippedOfTrailingWhitespace().array();
     lines = normalizeIndentation(lines);
-    // TODO check hierarchy correctness
+    verifyHierarchy(lines);
     return lines;
 }
 
@@ -157,13 +155,31 @@ bool hasNonWhitespaceChar(string s) pure nothrow
     return false;
 }
 
+void verifyHierarchy(in string[] lines) pure
+{
+    if (lines.empty)
+        return;
+
+    auto levels = lines.map!(a => cast(uint) a.getLeadingWhitespaceCount()).array();
+    if (levels[0] != 0)
+        throw new TreeParserException(Msg.rootMissing);
+    levels = levels[1 .. $];
+
+    uint prevLevel = 0;
+    foreach (level; levels)
+    {
+        int diff = level - prevLevel;
+        if (diff > 1)
+            throw new TreeParserException(Msg.hierarchyError);
+
+        prevLevel = level;
+    }
+}
+
 string[][] splitRoots(string[] lines)
 {
     if (lines.empty)
         return null;
-
-    if (isWhite(lines[0][0]))
-        throw new TreeParserException(Msg.hierarchyError);
 
     auto rootIndices = getRootIndices(lines);
     Appender!(string[][]) app;
