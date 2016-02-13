@@ -13,15 +13,13 @@ import uimodel.navigation.tree;
 /*
    TODO
    - implement verify
-   - TreeParserException
-   - move Msg enum into TreeParserException
    - inherit UITreeNode from TreeNode
    - remove whitespace check from splitRoots -- input will have been verified
    */
 
 TreeNode[] parseTrees(string text)
 {
-    auto lines = text.normalizeAndVerifyInput().array();
+    auto lines = text.normalizeAndVerifyInput();
     Appender!(TreeNode[]) trees;
     foreach (treeLines; splitRoots(lines))
     {
@@ -31,14 +29,22 @@ TreeNode[] parseTrees(string text)
     return trees.data;
 }
 
-private:
-
-private enum Msg : string
+class TreeParserException : Exception
 {
-    rootIsIndented = "Tree root must be at the beginning of the line.",
-    indentationError = "Indentation is inconsistent.",
-    hierarchyError = "Input results in invalid hierarchy"
+    this(Msg msg, string file = __FILE__, size_t line = __LINE__, Throwable next = null) pure nothrow @nogc
+    {
+        super(msg, file, line, next);
+    }
+
+    enum Msg : string
+    {
+        rootMissing = "First line can't be indented (highest hierarchy level).",
+        hierarchyError = "Input results in invalid hierarchy."
+    }
 }
+alias Msg = TreeParserException.Msg;
+
+private:
 
 TreeNode parseTreeLines(TreeNode root, string[] lines)
 {
@@ -95,7 +101,7 @@ body
     {
         auto indentSize = indentSizes[i];
         if (indentSize % normDivider)
-            throw new Exception(Msg.indentationError);
+            throw new Exception("Indentation is inconsistent.");
 
         auto newIndentSize = indentSize / normDivider;
         line = line[indentSize - newIndentSize .. $];
@@ -157,7 +163,7 @@ string[][] splitRoots(string[] lines)
         return null;
 
     if (isWhite(lines[0][0]))
-        throw new Exception(Msg.hierarchyError);
+        throw new TreeParserException(Msg.hierarchyError);
 
     auto rootIndices = getRootIndices(lines);
     Appender!(string[][]) app;
