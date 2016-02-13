@@ -10,18 +10,30 @@ import uimodel.uiobject;
 import uimodel.navigation.tree;
 
 @safe:
+/*
+   TODO mostly to address SR at various places
+   - implement normalize and verify
+   - remove mentioning of indentationSize
+   - simplify lower hierarchy to foreach line : line = line[1 .. $];
+   - remove isWhite checks from stripIndentation -- rename it to lowerHierarchyLevel
+   - TreeParserException
+   - move Msg enum into TreeParserException
+   - inherit UITreeNode from TreeNode
+   - remove whitespace check from splitRoots -- input will have been verified
+   */
 
 private enum Msg : string
 {
     rootIsIndented = "Tree root must be at the beginning of the line.",
-    wrongIndentation = "Indentation is inconsistent.",
+    indentationError = "Indentation is inconsistent.",
+    hierarchyError = "Input results in invalid hierarchy"
 }
 
 TreeNode[] parseTrees(size_t indentationSize = 4)(string text)
 {
     static assert(indentationSize > 0);
 
-    auto lines = text.getNonEmptyLinesStrippedOfTrailingWhitespace().array();
+    auto lines = text.normalizeAndVerifyInput().array();
     Appender!(TreeNode[]) trees;
     foreach (treeLines; splitRoots(lines))
     {
@@ -53,10 +65,19 @@ TreeNode parseTreeLines(size_t indentationSize)(TreeNode root, string[] lines)
     return node;
 }
 
+// FIXME remove after making parseTreeLinex expect normalized checked input
 // tree can't have multiple roots
 unittest
 {
     assertThrown(parseTreeLines!4(null, ["foo", "bar"]));
+}
+
+string[] normalizeAndVerifyInput(string s) pure
+{
+    auto lines = s.getNonEmptyLinesStrippedOfTrailingWhitespace().array();
+    // FIXME normalize indentation
+    // FIXME check hierarchy correctness
+    return lines;
 }
 
 auto getNonEmptyLinesStrippedOfTrailingWhitespace(string s) pure
@@ -71,7 +92,7 @@ auto stripIndentation(size_t indentationSize, T)(T lines) pure nothrow
     return lines.map!((a)
         {
             if (a.length < indentationSize || !isWhite(a[0 .. indentationSize]))
-                throw new Exception(Msg.wrongIndentation);
+                throw new Exception(Msg.indentationError);
 
             return a[indentationSize .. $];
         });
@@ -88,11 +109,14 @@ bool isWhite(string s) pure nothrow
 
 string[][] splitRoots(string[] lines)
 {
-    Appender!(string[][]) app;
-    auto rootIndices = getRootIndices(lines);
-    if (!lines.empty && rootIndices.empty)
-        throw new Exception(Msg.wrongIndentation);
+    if (lines.empty)
+        return null;
 
+    if (isWhite(lines[0][0]))
+        throw new Exception(Msg.hierarchyError);
+
+    auto rootIndices = getRootIndices(lines);
+    Appender!(string[][]) app;
     foreach (i; rootIndices.retro())
     {
         app.put(lines[i .. $]);
@@ -208,6 +232,14 @@ unittest
 {
     auto root = parseTree!1("foo\n bar\n fun");
     assert(2 == root.children.length);
+}
+
+// hierarchy error
+unittest
+{
+    assertThrown(parseTrees!1(" foo"));
+    assertThrown(parseTrees!1(" foo\nbar"));
+    assertThrown(parseTrees!1("foo\n  bar\n fun"));
 }
 
 version (unittest)
