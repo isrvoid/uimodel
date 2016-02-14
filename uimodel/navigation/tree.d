@@ -18,3 +18,5 @@ class TreeNode (T)
         obj = _obj;
     }
 }
+
+alias UITreeNode = TreeNode!UIObject;

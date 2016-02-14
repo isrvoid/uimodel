@@ -7,11 +7,10 @@ import std.array : array, Appender;
 
 import uimodel.uiobject;
 import uimodel.navigation.tree;
-alias UITreeNode = TreeNode!UIObject;
 
 @safe:
 
-UITreeNode[] parseTrees(string text)
+UITreeNode[] parseTrees(string text) pure
 {
     auto lines = text.normalizeAndVerifyInput();
     Appender!(UITreeNode[]) trees;
@@ -40,7 +39,7 @@ alias Msg = TreeParserException.Msg;
 
 private:
 
-UITreeNode parseTree(UITreeNode root, string[] lines)
+UITreeNode parseTree(UITreeNode root, string[] lines) pure 
 {
     if (lines.empty)
         return null;
@@ -173,7 +172,7 @@ void verifyHierarchy(in string[] lines) pure
     }
 }
 
-string[][] splitRoots(string[] lines)
+string[][] splitRoots(string[] lines) pure
 {
     if (lines.empty)
         return null;
@@ -189,7 +188,7 @@ string[][] splitRoots(string[] lines)
     return app.data;
 }
 
-size_t[] getRootIndices(string[] lines)
+size_t[] getRootIndices(string[] lines) pure
 {
     Appender!(size_t[]) app;
     foreach (i, line; lines)
