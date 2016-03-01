@@ -16,6 +16,6 @@ $(BUILDDIR)/unittest: $(UNITTEST_SRC)
 	@dmd $(DFLAGS) -main $^ -of$@
 
 clean:
-	-@$(RM) $(wildcard build/*)
+	-@$(RM) $(wildcard $(BUILDDIR)/*)
 
 .PHONY: clean
