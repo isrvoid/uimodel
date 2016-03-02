@@ -4,8 +4,8 @@ module uimodel.uiobject;
 
 class UIObject
 {
-    uint namespace;
     string id;
+    uint namespace;
 
     this(string _id, uint _namespace = 0) pure nothrow
     {
@@ -16,17 +16,17 @@ class UIObject
 
 class UIView (T) : UIObject, Observer!T
 {
-    private UpdateViewCommand!T command;
+    private UpdateViewCommand!T updateView;
 
-    this(string _id, uint _namespace, UpdateViewCommand!T _command)
+    this(string _id, uint _namespace, UpdateViewCommand!T _updateView)
     {
         super(_id, _namespace);
-        command = _command;
+        updateView = _updateView;
     }
 
     void notify(T update)
     {
-        command.executeViewUpdate(this, update);
+        updateView.execute(this, update);
     }
 }
 
@@ -35,34 +35,59 @@ interface Observer (T)
     void notify(T msg);
 }
 
-class UISignal (T) : UIObject
+interface Command (T)
 {
-    void function(T) execute;
+    void execute(T msg);
+}
 
-    this(string _id, uint _namespace, void function(T) _execute)
+class UISignal (T) : UIObject, Command!T
+{
+    private Command!T command;
+
+    this(string _id, uint _namespace, Command!T _command)
     {
         super(id, _namespace);
-        execute = _execute;
+        command = _command;
+    }
+
+    void execute(T msg)
+    {
+        command.execute(msg);
     }
 }
 
 interface UpdateViewCommand (T)
 {
-    void executeViewUpdate(UIView!T view, T update);
+    void execute(UIView!T view, T update);
 }
 
-class UIControl (T) : UIView
+class UIControl (T) : UIView!T, Command!T
 {
-    void function(T) execute;
+    private Command!T command;
 
-    this(string _id, uint _namespace, void function(T) _execute)
+    this(string _id, uint _namespace, UpdateViewCommand!T _updateView, Command!T _command)
     {
-        super(id, _namespace);
-        execute = _execute;
+        super(id, _namespace, _updateView);
+        command = _command;
+    }
+
+    void execute(T msg)
+    {
+        command.execute(msg);
     }
 }
 
-unittest // simple UIView creation
+unittest // create UIView
 {
     auto view = new UIView!double(null, 0, null);
+}
+
+unittest // create UISignal
+{
+    auto signal = new UISignal!int(null, 0, null);
+}
+
+unittest // create UIControl
+{
+    auto control = new UIControl!int(null, 0, null, null);
 }
