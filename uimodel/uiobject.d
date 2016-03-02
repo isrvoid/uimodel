@@ -52,7 +52,14 @@ class UISignal (T) : UIObject, Command!T
 
     void execute(T msg)
     {
-        command.execute(msg);
+        try
+        {
+            command.execute(msg);
+        }
+        catch (Exception e)
+        {
+            // TODO log
+        }
     }
 }
 
@@ -64,6 +71,7 @@ interface UpdateViewCommand (T)
 class UIControl (T) : UIView!T, Command!T
 {
     private Command!T command;
+    private T lastApplied;
 
     this(string _id, uint _namespace, UpdateViewCommand!T _updateView, Command!T _command)
     {
@@ -71,9 +79,27 @@ class UIControl (T) : UIView!T, Command!T
         command = _command;
     }
 
+    override void notify(T update)
+    {
+        bool shouldUpdate = lastApplied != update || lastApplied == T.init;
+        if (!shouldUpdate)
+            return;
+
+        updateView.execute(this, update);
+    }
+
     void execute(T msg)
     {
-        command.execute(msg);
+        try
+        {
+            command.execute(msg);
+            lastApplied = msg;
+        }
+        catch (Exception e)
+        {
+            lastApplied = T.init;
+            // TODO log
+        }
     }
 }
 
