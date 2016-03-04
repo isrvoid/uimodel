@@ -2,31 +2,35 @@ module uimodel.uiobject;
 
 @safe:
 
+uint getFastHash(string id, uint namespace) pure nothrow
+{
+    import std.digest.sha;
+    SHA1 sha;
+    foreach (ubyte b; id)
+        sha.put(b);
+
+    foreach (i; 0 .. 4)
+        sha.put(namespace >> 8 * i & 0xFF);
+
+    return (cast(uint[]) sha.finish()[0 .. 4])[0];
+}
+
 class UIObject
 {
-    string id;
-    uint namespace;
+    immutable
+    {
+        string id;
+        uint namespace;
+        uint fastHash;
+    }
 
     this(string _id, uint _namespace = 0) pure nothrow
     {
-        namespace = _namespace;
+        import uimodel.collision_checker;
+        assert(_id.length);
         id = _id;
-    }
-}
-
-class UIView (T) : UIObject, Observer!T
-{
-    private UpdateViewCommand!T updateView;
-
-    this(string _id, uint _namespace, UpdateViewCommand!T _updateView)
-    {
-        super(_id, _namespace);
-        updateView = _updateView;
-    }
-
-    void notify(T update)
-    {
-        updateView.execute(this, update);
+        namespace = _namespace;
+        fastHash = getFastHash(_id, _namespace);
     }
 }
 
@@ -35,9 +39,30 @@ interface Observer (T)
     void notify(T msg);
 }
 
+interface UpdateViewCommand (T)
+{
+    void execute(uint fastHash, T msg);
+}
+
 interface Command (T)
 {
     void execute(T msg);
+}
+
+class UIView (T) : UIObject, Observer!T
+{
+    private UpdateViewCommand!T updateCommand;
+
+    this(string _id, uint _namespace, UpdateViewCommand!T _updateCommand)
+    {
+        super(_id, _namespace);
+        updateCommand = _updateCommand;
+    }
+
+    void notify(T msg)
+    {
+        updateCommand.execute(fastHash, msg);
+    }
 }
 
 class UISignal (T) : UIObject, Command!T
@@ -46,7 +71,7 @@ class UISignal (T) : UIObject, Command!T
 
     this(string _id, uint _namespace, Command!T _command)
     {
-        super(id, _namespace);
+        super(_id, _namespace);
         command = _command;
     }
 
@@ -58,62 +83,87 @@ class UISignal (T) : UIObject, Command!T
         }
         catch (Exception e)
         {
-            // TODO log
+            // TODO log error
         }
     }
-}
-
-interface UpdateViewCommand (T)
-{
-    void execute(UIView!T view, T update);
 }
 
 class UIControl (T) : UIView!T, Command!T
 {
     private Command!T command;
-    private T lastApplied;
+    private T cache; // last view state to be received or successfully applied
 
-    this(string _id, uint _namespace, UpdateViewCommand!T _updateView, Command!T _command)
+    this(string _id, uint _namespace, UpdateViewCommand!T _update, Command!T _command)
     {
-        super(id, _namespace, _updateView);
+        super(_id, _namespace, _update);
         command = _command;
     }
 
     override void notify(T update)
     {
-        bool shouldUpdate = lastApplied != update || lastApplied == T.init;
+        bool shouldUpdate = cache != update || cache == T.init;
         if (!shouldUpdate)
             return;
 
-        updateView.execute(this, update);
+        updateCommand.execute(fastHash, update);
+        cache = update;
     }
 
     void execute(T msg)
     {
+        // unlike view update, command call can't be optional
         try
         {
+            scope(failure) notify(cache);
             command.execute(msg);
-            lastApplied = msg;
+            cache = msg;
         }
         catch (Exception e)
         {
-            lastApplied = T.init;
-            // TODO log
+            // TODO log error
         }
     }
 }
 
-unittest // create UIView
+import std.exception : assertNotThrown;
+
+unittest // empty name hash
 {
-    auto view = new UIView!double(null, 0, null);
+    assertNotThrown(getFastHash(null, 0));
+    assertNotThrown(getFastHash("", 42));
+}
+
+unittest // same hash is returned for input
+{
+    assert(getFastHash("foo", 42) == getFastHash("foo", 42));
+}
+
+unittest // different name yields different hash
+{
+    assert(getFastHash("foo", 0) != getFastHash("bar", 0));
+}
+
+unittest // different namespace yields different hash
+{
+    assert(getFastHash("foo", 0x8000) != getFastHash("foo", 0xC000));
+}
+
+// TODO refactor commands away, add tests:
+// UIReadout update doesn't throw
+// UISignal throws (use dummy setter)
+// UIControl update follows recv error
+
+unittest // create UIReadout
+{
+    auto foo = new UIView!double("foo", 0, null);
 }
 
 unittest // create UISignal
 {
-    auto signal = new UISignal!int(null, 0, null);
+    auto signal = new UISignal!int("foo", 0, null);
 }
 
 unittest // create UIControl
 {
-    auto control = new UIControl!int(null, 0, null, null);
+    auto control = new UIControl!int("foo", 0, null, null);
 }
