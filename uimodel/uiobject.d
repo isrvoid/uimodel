@@ -39,47 +39,52 @@ interface Observer (T)
     void notify(T msg);
 }
 
-interface UpdateViewCommand (T)
+interface Receiver (T)
 {
-    void execute(uint fastHash, T msg);
+    void receive(T msg);
 }
 
-interface Command (T)
-{
-    void execute(T msg);
-}
+alias sendFunc (T) = void function(uint fastHash, T msg);
+alias recvFunc (T) = void function(T msg);
 
 class UIView (T) : UIObject, Observer!T
 {
-    private UpdateViewCommand!T updateCommand;
+    private T cache; // last view state to be received or successfully applied
 
-    this(string _id, uint _namespace, UpdateViewCommand!T _updateCommand)
+    sendFunc!T send;
+
+    this(string _id, uint _namespace, sendFunc!T _send)
     {
         super(_id, _namespace);
-        updateCommand = _updateCommand;
+        send = _send;
     }
 
-    void notify(T msg)
+    void notify(T update)
     {
-        updateCommand.execute(fastHash, msg);
+        bool shouldUpdate = cache != update || cache == T.init;
+        if (!shouldUpdate)
+            return;
+
+        send(fastHash, update);
+        cache = update;
     }
 }
 
-class UISignal (T) : UIObject, Command!T
+class UISignal (T) : UIObject, Receiver!T
 {
-    private Command!T command;
+    recvFunc!T recv;
 
-    this(string _id, uint _namespace, Command!T _command)
+    this(string _id, uint _namespace, recvFunc!T _recv)
     {
         super(_id, _namespace);
-        command = _command;
+        recv = _recv;
     }
 
-    void execute(T msg)
+    void receive(T msg)
     {
         try
         {
-            command.execute(msg);
+            recv(msg);
         }
         catch (Exception e)
         {
@@ -88,34 +93,23 @@ class UISignal (T) : UIObject, Command!T
     }
 }
 
-class UIControl (T) : UIView!T, Command!T
+class UIControl (T) : UIView!T, Receiver!T
 {
-    private Command!T command;
-    private T cache; // last view state to be received or successfully applied
+    recvFunc!T recv;
 
-    this(string _id, uint _namespace, UpdateViewCommand!T _update, Command!T _command)
+    this(string _id, uint _namespace, sendFunc!T _send, recvFunc!T _recv)
     {
-        super(_id, _namespace, _update);
-        command = _command;
+        super(_id, _namespace, _send);
+        recv = _recv;
     }
 
-    override void notify(T update)
+    void receive(T msg)
     {
-        bool shouldUpdate = cache != update || cache == T.init;
-        if (!shouldUpdate)
-            return;
-
-        updateCommand.execute(fastHash, update);
-        cache = update;
-    }
-
-    void execute(T msg)
-    {
-        // unlike view update, command call can't be optional
+        // unlike view update, recv call can't be optional
         try
         {
             scope(failure) notify(cache);
-            command.execute(msg);
+            recv(msg);
             cache = msg;
         }
         catch (Exception e)
